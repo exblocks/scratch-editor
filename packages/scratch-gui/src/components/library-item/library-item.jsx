@@ -21,6 +21,10 @@ class LibraryItemComponent extends React.PureComponent {
         bindAll(this, [
             'renderImage'
         ]);
+        this.state = {
+            copySuccess: false
+        };
+        this.handleCopyToClipboard = this.handleCopyToClipboard.bind(this);
     }
     renderImage (className, imageSource) {
         // Scratch Android and Scratch Desktop assume the user is offline and has
@@ -43,6 +47,19 @@ class LibraryItemComponent extends React.PureComponent {
             src={url}
         />);
     }
+    handleCopyToClipboard (e) {
+        e.preventDefault();
+        navigator.clipboard.writeText(this.props.extensionURL)
+            .then(() => {
+                this.setState({copySuccess: true});
+                setTimeout(() => {
+                    this.setState({copySuccess: false});
+                }, 2000);
+            })
+            .catch(err => {
+                console.error('Failed to copy URL: ', err);
+            });
+    }
     render () {
         return this.props.featured ? (
             <div
@@ -55,9 +72,11 @@ class LibraryItemComponent extends React.PureComponent {
                     this.props.extensionId ? styles.libraryItemExtension : null,
                     this.props.hidden ? styles.hidden : null
                 )}
-                onClick={this.props.onClick}
             >
-                <div className={styles.featuredImageContainer}>
+                <div
+                    className={styles.featuredImageContainer}
+                    onClick={this.props.onClick}
+                >
                     {this.props.disabled ? (
                         <div className={styles.comingSoonText}>
                             <FormattedMessage
@@ -87,6 +106,29 @@ class LibraryItemComponent extends React.PureComponent {
                     <span className={styles.libraryItemName}>{this.props.name}</span>
                     <br />
                     <span className={styles.featuredDescription}>{this.props.description}</span>
+                    {this.props.helpLink ? (
+                        <div>
+                            <span className={styles.featuredExtensionHelp}>
+                                <a
+                                    href={this.props.helpLink}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >{'👉 Help Link'}</a></span>
+                        </div>
+                    ) : null}
+                    {this.props.extensionURL ? (
+                        <div>
+                            <span className={styles.featuredExtensionUrl}>{'Module: '}
+                                <a
+                                    href={this.props.extensionURL}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={this.handleCopyToClipboard}
+                                    title="Click to copy URL to clipboard"
+                                >{this.props.extensionURL} {this.state.copySuccess ? '✓ Copied!' : ''}</a>
+                            </span>
+                        </div>
+                    ) : null}
                 </div>
                 {this.props.bluetoothRequired || this.props.internetConnectionRequired || this.props.collaborator ? (
                     <div className={styles.featuredExtensionMetadata}>
@@ -184,7 +226,9 @@ LibraryItemComponent.propTypes = {
     ]),
     disabled: PropTypes.bool,
     extensionId: PropTypes.string,
+    extensionURL: PropTypes.string,
     featured: PropTypes.bool,
+    helpLink: PropTypes.string,
     hidden: PropTypes.bool,
     iconSource: ScratchImage.ImageSourcePropType,
     insetIconURL: PropTypes.string,
