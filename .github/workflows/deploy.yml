@@ -1,0 +1,95 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        required: false
+        default: 'exblocks'
+        type: string
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+  
+  deploy:
+    needs:
+      - ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Debug info
+        run: |
+          cat <<EOF
+          Branch to checkout: ${{ inputs.branch || 'exblocks' }}
+          Triggered by: ${{ github.actor }}
+          EOF
+
+      - name: Config GitHub user
+        shell: bash
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'github-actions@localhost'
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: ${{ inputs.branch || 'exblocks' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with:
+          cache: 'npm'
+          node-version-file: '.nvmrc'
+          registry-url: 'https://registry.npmjs.org'
+
+      - uses: ./.github/actions/install-dependencies
+
+      - name: Build all workspaces
+        run: |
+          # Build scratch-svg-renderer
+          npm run build --workspace @scratch/scratch-svg-renderer
+          
+          # Build scratch-render
+          npm run build --workspace @scratch/scratch-render
+          
+          # Build scratch-vm
+          npm run build --workspace @scratch/scratch-vm
+          
+          # Build scratch-gui
+          npm run build --workspace @scratch/scratch-gui
+
+      - name: Debug build output
+        run: |
+          echo "Checking build directory..."
+          ls -la ./packages/scratch-gui/
+          if [ -d "./packages/scratch-gui/build" ]; then
+            echo "Build directory exists:"
+            ls -la ./packages/scratch-gui/build/
+          else
+            echo "Build directory does not exist!"
+          fi
+
+      - name: Prepare pages content (editor/ and /chunks)
+        run: |
+          rm -rf gh-pages-out
+          mkdir -p gh-pages-out/editor
+          # copy editor site
+          rsync -a ./packages/scratch-gui/build/ gh-pages-out/editor/
+          # duplicate worker chunks to site root (/chunks)
+          mkdir -p gh-pages-out/chunks
+          rsync -a ./packages/scratch-gui/build/chunks/ gh-pages-out/chunks/ || true
+          echo "Prepared tree:"
+          find gh-pages-out -maxdepth 2 -type d -print
+
+      - name: Deploy scratch-gui to GitHub Pages (editor/ and /chunks)
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./gh-pages-out
+          # publish to branch root so that we have /editor and /chunks
+          destination_dir: .
+          keep_files: false
+          force_orphan: true
+          full_commit_message: "Deploy editor from ${{ inputs.branch || 'exblocks' }} branch - Build for ${{ github.sha }}"
